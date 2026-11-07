@@ -1,0 +1,52 @@
+name: Pocket Clubs Unity Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  verify-gate0-gate1:
+    name: Gate 0 & Gate 1 Unity Tests + Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Unity license and runner prerequisites explicitly
+        run: |
+          if [[ -z "${UNITY_LICENSE:-}" && -z "${UNITY_SERIAL:-}" ]]; then
+            echo "::error::Missing UNITY_LICENSE or UNITY_SERIAL secret. Required Unity checks cannot be silently skipped."
+            exit 1
+          fi
+          if ! command -v unity-editor >/dev/null 2>&1 && [[ -z "${UNITY_EDITOR_PATH:-}" ]]; then
+            echo "::error::Unity Editor 6000.0.24f1 is not installed on this runner. Configure a Unity 6000.0.24f1 runner image or set UNITY_EDITOR_PATH."
+            exit 1
+          fi
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+
+      - name: Check environment
+        run: ./BuildScripts/check_environment.sh
+
+      - name: Generate Gate 0 & Gate 1 assets and scenes
+        run: ./BuildScripts/generate_project_assets.sh
+
+      - name: Run EditMode and PlayMode tests
+        run: ./BuildScripts/run_unity_tests.sh
+
+      - name: Build Android Development APK
+        run: ./BuildScripts/build_android_apk.sh
+
+      - name: Upload Test XML & Android APK Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-clubs-gate1-artifacts
+          path: |
+            Logs/*.xml
+            Logs/*.log
+            Builds/Android/*.apk
